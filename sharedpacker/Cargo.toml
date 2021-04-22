@@ -1,0 +1,8 @@
+[package]
+name = "sharedpacker"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+exechelper = { path = "../exechelper" }
+gumdrop = "0.8"
