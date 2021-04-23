@@ -1,6 +1,6 @@
 use exechelper;
 use gumdrop::Options;
-use std::{ops::Deref, path::{Path, PathBuf}, collections::HashMap};
+use std::{path::{Path, PathBuf}, collections::HashMap};
 
 #[derive(Debug, Options)]
 pub struct Cli {
@@ -393,51 +393,4 @@ fn main() {
         eprintln!("Failed to copy dependencies to output folder: {}", e);
         std::process::exit(1);
     }
-
-
-    // // we also copy the original exec path given to us
-    // let execname = match execpath.file_name() {
-    //     Some(n) => n,
-    //     None => {
-    //         eprintln!("Failed to get exec path file name from {:?}", execpath);
-    //         // cleanup_if_err(&output_name);
-    //         std::process::exit(1);
-    //     }
-    // };
-    // let mut output_path = output_name.clone();
-    // output_path.push(execname);
-    // if let Err(e) = std::fs::copy(execpath, &output_path) {
-    //     eprintln!("Failed to copy {:?} to {:?}\n{}", execpath, output_path, e);
-    //     // cleanup_if_err(&output_name);
-    //     std::process::exit(1);
-    // }
-
-    // // then we make a wrapper script
-    // let execnamestr = execname.to_string_lossy();
-    // let wrapper_script = format!("#!/usr/bin/env bash\n\nLD_LIBRARY_PATH=. ./{}", execnamestr);
-    // let mut wrapper_script_path = output_name.clone();
-    // let wrapper_script_name = format!("{}_wrapped", execnamestr);
-    // wrapper_script_path.push(wrapper_script_name);
-    // if let Err(e) = std::fs::write(&wrapper_script_path, wrapper_script) {
-    //     eprintln!("Failed to write wrapper script at {:?}\n{}", wrapper_script_path, e);
-    //     // cleanup_if_err(&output_name);
-    //     std::process::exit(1);
-    // }
-
-    // // too lazy to figure out how to do chmod +x in rust, so just do it as a command:
-    // let exec_args = ["chmod", "+x", wrapper_script_path.as_os_str().to_str().unwrap()];
-    // let res = exechelper::execute(&exec_args);
-    // match res {
-    //     Ok(status) => {
-    //         if status.status != 0 {
-    //             eprintln!("chmod +x {:?} failed", wrapper_script_path);
-    //             eprintln!("{}", status.stderr);
-    //             std::process::exit(1);
-    //         }
-    //     }
-    //     Err(e) => {
-    //         eprintln!("Failed to chmod +x wrapper script: {}", e);
-    //         std::process::exit(1);
-    //     }
-    // }
 }
