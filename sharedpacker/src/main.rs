@@ -66,6 +66,23 @@ pub fn parse_ldd_output(
         }
         let no_whitespace = line.trim_start().trim_end();
         if !no_whitespace.contains(" => ") {
+            // also want to check if we have the loader here
+            // because sometime the loader can be present without
+            // the => mapping
+            // which should be fine because usually the loader has
+            // its full path as the first entry anyway
+            if only_loader && no_whitespace.starts_with('/') {
+                let loader_path = match no_whitespace.split(' ').next() {
+                    Some(p) => p,
+                    None => continue,
+                };
+                let loader_name = loader_path.rsplit('/').next().unwrap_or(loader_path);
+                return Ok(vec![SharedLib {
+                    name: loader_name.into(),
+                    path: loader_path.into(),
+                }]);
+            }
+
             continue;
         }
 
