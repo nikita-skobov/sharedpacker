@@ -20,6 +20,10 @@ pub struct Cli {
     #[options(short = "f")]
     pub force: bool,
 
+    /// whatever the executable is, wrap it in a shell script
+    /// that calls the executable with the correct LD_LIBRARY_PATH for you
+    pub make_wrapper: bool,
+
     #[options(free)]
     pub exepath: Vec<PathBuf>
 }
@@ -267,10 +271,23 @@ pub fn patch_loader(
     Ok(())
 }
 
+pub fn make_shell_script_wrapper(
+    execname: &str,
+    loadername: &str,
+) -> String {
+    // https://stackoverflow.com/a/4774063
+    let part_one: String = "#!/usr/bin/env bash\n\nSCRIPTPATH=\"$( cd -- \"$(dirname \"$0\")\" >/dev/null 2>&1 ; pwd -P )\"".into();
+    let part_two = format!("\"$SCRIPTPATH/{}\" --library-path \"$SCRIPTPATH\" \"$SCRIPTPATH/{}\" \"$@\"", loadername, execname);
+    let out = format!("{}\n{}", part_one, part_two);
+    out
+}
+
 pub fn copy_dependencies_to_output_folder(
     archive_path: &PathBuf,
     dependencies: &Vec<DependencyNode>,
     loader: &SharedLib,
+    execname: &str,
+    make_wrapper: bool,
 ) -> Result<(), String> {
     std::fs::create_dir_all(&archive_path).map_err(|e| e.to_string())?;
 
@@ -293,6 +310,23 @@ pub fn copy_dependencies_to_output_folder(
     new_loader_path.push(loader.name.clone());
     std::fs::copy(&loader.path, &new_loader_path)
         .map_err(|e| format!("Failed to copy loader {:?} to {:?}\n{}", loader.path, new_loader_path, e))?;
+
+    // also, if user wants to make a wrapper, we replace the archive_path/execname
+    // with archive_path/.execname-original and make archive_path/execname a shell script
+    // that launches archive_path/.execname-original with the correct LD_LIBRARY_PATH
+    let mut old_exec = archive_path.clone();
+    old_exec.push(execname);
+    let mut new_exec = archive_path.clone();
+    let newname = format!(".{}-original", execname);
+    new_exec.push(&newname);
+    if make_wrapper {
+        std::fs::rename(&old_exec, &new_exec)
+            .map_err(|e| format!("Failed to rename {:?} to {:?}\n{}", old_exec, new_exec, e))?;
+        // now make the shell script
+        let wrapper = make_shell_script_wrapper(&newname, &loader.name);
+        std::fs::write(&old_exec, wrapper)
+            .map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
@@ -354,7 +388,7 @@ fn main() {
     // now iterate over the flat list of dependencies and copy all of them
     // to the output folder
     if let Err(e) = copy_dependencies_to_output_folder(
-        &output_name, &dependencies, &loader,
+        &output_name, &dependencies, &loader, &execname, cli.make_wrapper,
     ) {
         eprintln!("Failed to copy dependencies to output folder: {}", e);
         std::process::exit(1);
