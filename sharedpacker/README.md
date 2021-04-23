@@ -20,7 +20,7 @@ I have provided a release of `sharedpacker` built for `x86-64-unknown-linux-musl
 
 ```sh
 git clone https://github.com/nikita-skobov/sharedpacker
-cd sharedpacker
+cd sharedpacker/sharedpacker/
 cargo build --release
 # optionally install it:
 cp target/release/sharedpacker /usr/local/bin/
