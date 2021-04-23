@@ -323,6 +323,13 @@ pub fn copy_dependencies_to_output_folder(
         let wrapper = make_shell_script_wrapper(&newname, &loader.name);
         std::fs::write(&old_exec, wrapper)
             .map_err(|e| e.to_string())?;
+        // also make it executable:
+        let old_exec_path = old_exec.to_string_lossy();
+        let exec_args = ["chmod", "+x", &old_exec_path];
+        match exechelper::execute(&exec_args) {
+            Ok(out) => if out.status != 0 { return Err(out.stderr) },
+            Err(e) => { return Err(e.to_string()) },
+        }
     }
 
     Ok(())
