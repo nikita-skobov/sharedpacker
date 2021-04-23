@@ -24,7 +24,7 @@ pub struct Cli {
     pub exepath: Vec<PathBuf>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SharedLib {
     pub name: String,
     pub path: PathBuf,
@@ -37,8 +37,9 @@ pub struct DependencyNode {
     pub dependencies: Vec<String>,
 }
 
-pub fn get_lib_path_list(
+pub fn parse_ldd_output(
     path: &Path,
+    only_loader: bool,
 ) -> Result<Vec<SharedLib>, String> {
     let strthing: &str = path.to_str().map_or_else(|| Err("Failed to get path as string"), |o| Ok(o))?;
     let exec_args = [
@@ -74,16 +75,21 @@ pub fn get_lib_path_list(
             return Err(format!("Dependency on {} is not found", libname));
         }
 
-        // TODO: should we ignore the loader or not?
-        if libname.starts_with('/') {
+        // if we are not considering the loader, then ignore when path starts with /
+        // which i assume only happens for the loader?
+        if !only_loader && libname.starts_with('/') {
             continue;
         }
 
-        // let libname = if libname.starts_with('/') {
-        //     // if this is the loader it will usually start with /
-        //     // so we want to remove its base bath and just have the file name
-        //     libname.rsplit('/').next().unwrap_or(libname)
-        // } else { libname };
+        // if we are only interested in finding the loader
+        // and we see that the libname starts with the /
+        // then parse out the loader name
+        let is_loader = only_loader && libname.starts_with('/');
+        let libname = if is_loader {
+            // if this is the loader it will usually start with /
+            // so we want to remove its base bath and just have the file name
+            libname.rsplit('/').next().unwrap_or(libname)
+        } else { libname };
 
         let pathpart = match pathpart.find(' ') {
             None => pathpart,
@@ -91,6 +97,17 @@ pub fn get_lib_path_list(
                 &pathpart[0..index]
             }
         };
+
+        // if we are only interested in the loader
+        // and this one is the loader, then instead of outputting to the vec
+        // just return here because we found it
+        if is_loader {
+            return Ok(vec![SharedLib {
+                name: libname.into(),
+                path: pathpart.into(),
+            }]);
+        }
+
         outvec.push(SharedLib {
             name: libname.into(),
             path: pathpart.into(),
@@ -98,6 +115,22 @@ pub fn get_lib_path_list(
     }
 
     Ok(outvec)
+}
+
+pub fn get_lib_path_list(
+    path: &Path,
+) -> Result<Vec<SharedLib>, String> {
+    parse_ldd_output(path, false)
+}
+
+pub fn get_loader(
+    path: &Path,
+) -> Result<SharedLib, String> {
+    let loader = parse_ldd_output(path, true)?;
+    match loader.get(0) {
+        Some(lib) => Ok(lib.clone()),
+        None => Err(format!("Failed to get loader from {:?}", path)),
+    }
 }
 
 /// use patchelf to find a list of needed libs from an executable
@@ -237,12 +270,9 @@ pub fn patch_loader(
 pub fn copy_dependencies_to_output_folder(
     archive_path: &PathBuf,
     dependencies: &Vec<DependencyNode>,
+    loader: &SharedLib,
 ) -> Result<(), String> {
     std::fs::create_dir_all(&archive_path).map_err(|e| e.to_string())?;
-
-    // find the linker name
-    // TODO:
-    let linker_name = "ld-linux-x86-64.so.2";
 
     for dep in dependencies {
         let dep_path = &dep.path;
@@ -254,12 +284,15 @@ pub fn copy_dependencies_to_output_folder(
         std::fs::copy(dep_path, &output_path)
             .map_err(|e| format!("Failed to copy {:?} to {:?}\n{}", dep_path, output_path, e))?;
 
-        // now patch this file's dynamic section with all of its dependencies:
-        // for child_dep in &dep.dependencies {
-        //     patch_shared_lib(&child_dep, &output_path)?;
-        // }
-        patch_loader(linker_name, &output_path)?;
+        // now change the loader to point to the specific one we copied
+        patch_loader(&loader.name, &output_path)?;
     }
+
+    // finally, copy the loader itself
+    let mut new_loader_path = archive_path.clone();
+    new_loader_path.push(loader.name.clone());
+    std::fs::copy(&loader.path, &new_loader_path)
+        .map_err(|e| format!("Failed to copy loader {:?} to {:?}\n{}", loader.path, new_loader_path, e))?;
 
     Ok(())
 }
@@ -310,10 +343,18 @@ fn main() {
         std::process::exit(1);
     }
 
+    let loader = match get_loader(&execpath) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+
     // now iterate over the flat list of dependencies and copy all of them
     // to the output folder
     if let Err(e) = copy_dependencies_to_output_folder(
-        &output_name, &dependencies
+        &output_name, &dependencies, &loader,
     ) {
         eprintln!("Failed to copy dependencies to output folder: {}", e);
         std::process::exit(1);
