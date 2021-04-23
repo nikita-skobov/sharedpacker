@@ -4,24 +4,21 @@ use std::{path::{Path, PathBuf}, collections::HashMap};
 
 #[derive(Debug, Options)]
 pub struct Cli {
-    /// prints thaaa helpp
+    /// prints the help
     pub help: bool,
 
     /// print detailed logging info to stderr
     pub verbose: bool,
 
-    /// name of folder to be created that will contain
-    /// the archive of all of the shared libs
+    /// name of folder to be created that will contain the archive of all of the shared libs
     #[options(short = "o")]
     pub output: Option<PathBuf>,
 
-    /// if the output archive already exists by default we exit with an error
-    /// and a message. if you pass the --force flag, we will override it
+    /// if the output archive already exists by default we exit with an error and a message. if you pass the --force flag, we will override it
     #[options(short = "f")]
     pub force: bool,
 
-    /// whatever the executable is, wrap it in a shell script
-    /// that calls the executable with the correct LD_LIBRARY_PATH for you
+    /// whatever the executable is, wrap it in a shell script that calls the executable with the correct LD_LIBRARY_PATH for you
     pub make_wrapper: bool,
 
     #[options(free)]
